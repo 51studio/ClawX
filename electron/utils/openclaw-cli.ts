@@ -269,6 +269,7 @@ export function generateCompletionCache(): void {
     },
     stdio: 'ignore',
     detached: false,
+    windowsHide: true,
   });
 
   child.on('close', (code) => {
@@ -305,6 +306,7 @@ export function installCompletionToProfile(): void {
       },
       stdio: 'ignore',
       detached: false,
+      windowsHide: true,
     },
   );
 

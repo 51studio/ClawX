@@ -610,7 +610,7 @@ export class GatewayManager extends EventEmitter {
 
       const loaded = await new Promise<boolean>((resolve) => {
         import('child_process').then(cp => {
-          cp.exec(`launchctl print ${serviceTarget}`, { timeout: 5000 }, (err) => {
+          cp.exec(`launchctl print ${serviceTarget}`, { timeout: 5000, windowsHide: true }, (err) => {
             resolve(!err);
           });
         }).catch(() => resolve(false));
@@ -621,7 +621,7 @@ export class GatewayManager extends EventEmitter {
       logger.info(`Unloading launchctl service ${serviceTarget} to prevent auto-respawn`);
       await new Promise<void>((resolve) => {
         import('child_process').then(cp => {
-          cp.exec(`launchctl bootout ${serviceTarget}`, { timeout: 10000 }, (err) => {
+          cp.exec(`launchctl bootout ${serviceTarget}`, { timeout: 10000, windowsHide: true }, (err) => {
             if (err) {
               logger.warn(`Failed to bootout launchctl service: ${err.message}`);
             } else {
@@ -666,7 +666,7 @@ export class GatewayManager extends EventEmitter {
 
         const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
           import('child_process').then(cp => {
-            cp.exec(cmd, { timeout: 5000 }, (err, stdout) => {
+            cp.exec(cmd, { timeout: 5000, windowsHide: true }, (err, stdout) => {
               if (err) resolve({ stdout: '' });
               else resolve({ stdout });
             });
@@ -694,7 +694,7 @@ export class GatewayManager extends EventEmitter {
                   if (process.platform === 'win32') {
                     // On Windows, use taskkill for reliable process group termination
                     import('child_process').then(cp => {
-                      cp.exec(`taskkill /PID ${pid} /T /F`, { timeout: 5000 }, () => { });
+                      cp.exec(`taskkill /PID ${pid} /T /F`, { timeout: 5000, windowsHide: true }, () => { });
                     }).catch(() => { });
                   } else {
                     // SIGTERM first so the gateway can clean up its lock file.
@@ -798,6 +798,7 @@ export class GatewayManager extends EventEmitter {
         detached: false,
         shell: false,
         env: spawnEnv,
+        windowsHide: true,
       });
 
       let settled = false;
@@ -1051,6 +1052,7 @@ export class GatewayManager extends EventEmitter {
         detached: false,
         shell: useShell,
         env: spawnEnv,
+        windowsHide: true,
       });
       const child = this.process;
       this.ownsProcess = true;
@@ -1560,6 +1562,17 @@ export class GatewayManager extends EventEmitter {
 
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
+
+      // Guard against overlapping start flows — a debouncedRestart() or
+      // manual start() may already be in progress.  Without this check
+      // both the reconnect path and the restart path can call
+      // startProcess() concurrently, spawning two gateway processes that
+      // then fight over the same port.
+      if (this.startLock) {
+        logger.debug('Reconnect skipped: a start flow is already in progress');
+        return;
+      }
+
       try {
         // Try to find existing Gateway first
         const existing = await this.findExistingGateway();

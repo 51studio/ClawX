@@ -53,7 +53,7 @@ function resolveUvBin(): { bin: string; source: 'bundled' | 'path' | 'bundled-fa
 function findUvInPathSync(): boolean {
   try {
     const cmd = process.platform === 'win32' ? 'where.exe uv' : 'which uv';
-    execSync(cmd, { stdio: 'ignore', timeout: 5000 });
+    execSync(cmd, { stdio: 'ignore', timeout: 5000, windowsHide: true });
     return true;
   } catch {
     return false;
@@ -95,6 +95,7 @@ export async function isPythonReady(): Promise<boolean> {
     try {
       const child = spawn(useShell ? quoteForCmd(uvBin) : uvBin, ['python', 'find', '3.12'], {
         shell: useShell,
+        windowsHide: true,
       });
       child.on('close', (code) => resolve(code === 0));
       child.on('error', () => resolve(false));
@@ -121,6 +122,7 @@ async function runPythonInstall(
     const child = spawn(useShell ? quoteForCmd(uvBin) : uvBin, ['python', 'install', '3.12'], {
       shell: useShell,
       env,
+      windowsHide: true,
     });
 
     child.stdout?.on('data', (data) => {
@@ -210,6 +212,7 @@ export async function setupManagedPython(): Promise<void> {
       const child = spawn(verifyShell ? quoteForCmd(uvBin) : uvBin, ['python', 'find', '3.12'], {
         shell: verifyShell,
         env: { ...process.env, ...uvEnv },
+        windowsHide: true,
       });
       let output = '';
       child.stdout?.on('data', (data) => { output += data; });
