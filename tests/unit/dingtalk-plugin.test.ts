@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hasDingTalkConfigReferences,
   resolveDingTalkPluginCandidateSources,
+  runDingTalkStartupCompatibilityPreflight,
 } from '@electron/utils/dingtalk-plugin';
 
 describe('dingtalk plugin compatibility utilities', () => {
@@ -71,6 +72,78 @@ describe('dingtalk plugin compatibility utilities', () => {
         '/workspace/build/openclaw-plugins/dingtalk',
         '/workspace/build/openclaw-plugins/dingtalk',
       ]);
+    });
+  });
+
+  describe('runDingTalkStartupCompatibilityPreflight', () => {
+    it('skips install when config has no dingtalk references', async () => {
+      let installCalls = 0;
+      const result = await runDingTalkStartupCompatibilityPreflight(
+        {
+          channels: { telegram: { enabled: true } },
+          plugins: { allow: ['discord'] },
+        },
+        {
+          isPluginInstalled: async () => false,
+          installPlugin: async () => {
+            installCalls++;
+            return { installed: true };
+          },
+        },
+      );
+
+      expect(result).toEqual({
+        detectedConfigReferences: false,
+        installAttempted: false,
+        installed: false,
+      });
+      expect(installCalls).toBe(0);
+    });
+
+    it('attempts install and returns success when dingtalk is referenced', async () => {
+      let installCalls = 0;
+      const result = await runDingTalkStartupCompatibilityPreflight(
+        {
+          plugins: { allow: ['dingtalk'] },
+        },
+        {
+          isPluginInstalled: async () => false,
+          installPlugin: async () => {
+            installCalls++;
+            return { installed: true };
+          },
+        },
+      );
+
+      expect(result).toEqual({
+        detectedConfigReferences: true,
+        installAttempted: true,
+        installed: true,
+        warning: undefined,
+      });
+      expect(installCalls).toBe(1);
+    });
+
+    it('attempts install and returns warning on install failure', async () => {
+      const result = await runDingTalkStartupCompatibilityPreflight(
+        {
+          channels: { dingtalk: { enabled: true } },
+        },
+        {
+          isPluginInstalled: async () => false,
+          installPlugin: async () => ({
+            installed: false,
+            warning: 'Bundled DingTalk plugin mirror not found.',
+          }),
+        },
+      );
+
+      expect(result).toEqual({
+        detectedConfigReferences: true,
+        installAttempted: true,
+        installed: false,
+        warning: 'Bundled DingTalk plugin mirror not found.',
+      });
     });
   });
 });

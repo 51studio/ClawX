@@ -32,6 +32,11 @@ export interface DingTalkStartupCompatibilityResult {
   warning?: string;
 }
 
+export interface DingTalkStartupCompatibilityDeps {
+  isPluginInstalled: () => Promise<boolean>;
+  installPlugin: () => Promise<DingTalkInstallResult>;
+}
+
 export function hasDingTalkConfigReferences(config: Record<string, unknown>): boolean {
   const channels = (config.channels && typeof config.channels === 'object')
     ? config.channels as Record<string, unknown>
@@ -133,6 +138,34 @@ export async function ensureDingTalkPluginInstalled(): Promise<DingTalkInstallRe
   }
 }
 
+export async function runDingTalkStartupCompatibilityPreflight(
+  config: Record<string, unknown>,
+  deps: DingTalkStartupCompatibilityDeps,
+): Promise<DingTalkStartupCompatibilityResult> {
+  if (!hasDingTalkConfigReferences(config)) {
+    return {
+      detectedConfigReferences: false,
+      installAttempted: false,
+      installed: await deps.isPluginInstalled(),
+    };
+  }
+
+  logger.info('Detected DingTalk references in openclaw.json during startup preflight');
+  const installResult = await deps.installPlugin();
+  if (!installResult.installed) {
+    logger.warn(`DingTalk startup preflight could not ensure plugin install: ${installResult.warning || 'unknown reason'}`);
+  } else {
+    logger.info('DingTalk startup preflight ensured plugin installation');
+  }
+
+  return {
+    detectedConfigReferences: true,
+    installAttempted: true,
+    installed: installResult.installed,
+    warning: installResult.warning,
+  };
+}
+
 export async function ensureDingTalkStartupCompatibility(): Promise<DingTalkStartupCompatibilityResult> {
   if (!(await fileExists(OPENCLAW_CONFIG_PATH))) {
     return {
@@ -168,26 +201,8 @@ export async function ensureDingTalkStartupCompatibility(): Promise<DingTalkStar
     };
   }
 
-  if (!hasDingTalkConfigReferences(parsedConfig)) {
-    return {
-      detectedConfigReferences: false,
-      installAttempted: false,
-      installed: await isDingTalkPluginInstalled(),
-    };
-  }
-
-  logger.info('Detected DingTalk references in openclaw.json during startup preflight');
-  const installResult = await ensureDingTalkPluginInstalled();
-  if (!installResult.installed) {
-    logger.warn(`DingTalk startup preflight could not ensure plugin install: ${installResult.warning || 'unknown reason'}`);
-  } else {
-    logger.info('DingTalk startup preflight ensured plugin installation');
-  }
-
-  return {
-    detectedConfigReferences: true,
-    installAttempted: true,
-    installed: installResult.installed,
-    warning: installResult.warning,
-  };
+  return runDingTalkStartupCompatibilityPreflight(parsedConfig, {
+    isPluginInstalled: isDingTalkPluginInstalled,
+    installPlugin: ensureDingTalkPluginInstalled,
+  });
 }
