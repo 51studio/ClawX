@@ -14,6 +14,16 @@ const electronAPI = {
   ipcRenderer: {
     invoke: (channel: string, ...args: unknown[]) => {
       const validChannels = [
+        // Gateway
+        'gateway:status',
+        'gateway:isConnected',
+        'gateway:start',
+        'gateway:stop',
+        'gateway:restart',
+        'gateway:rpc',
+        'gateway:httpProxy',
+        'gateway:health',
+        'gateway:getControlUiUrl',
         // OpenClaw
         'openclaw:status',
         'openclaw:isReady',
@@ -32,11 +42,19 @@ const electronAPI = {
         'app:platform',
         'app:quit',
         'app:relaunch',
+        'app:request',
         // Window controls
         'window:minimize',
         'window:maximize',
         'window:close',
         'window:isMaximized',
+        // Settings
+        'settings:get',
+        'settings:set',
+        'settings:setMany',
+        'settings:getAll',
+        'settings:reset',
+        'usage:recentTokenHistory',
         // Update
         'update:status',
         'update:version',
@@ -46,9 +64,73 @@ const electronAPI = {
         'update:setChannel',
         'update:setAutoDownload',
         'update:cancelAutoInstall',
+        // Env
+        'env:getConfig',
+        'env:setApiKey',
+        'env:deleteApiKey',
+        // Provider
+        'provider:list',
+        'provider:get',
+        'provider:save',
+        'provider:delete',
+        'provider:setApiKey',
+        'provider:updateWithKey',
+        'provider:deleteApiKey',
+        'provider:hasApiKey',
+        'provider:getApiKey',
+        'provider:setDefault',
+        'provider:getDefault',
+        'provider:validateKey',
+        'provider:requestOAuth',
+        'provider:cancelOAuth',
+        // Cron
+        'cron:list',
+        'cron:create',
+        'cron:update',
+        'cron:delete',
+        'cron:toggle',
+        'cron:trigger',
+        // Channel Config
+        'channel:saveConfig',
+        'channel:getConfig',
+        'channel:getFormValues',
+        'channel:deleteConfig',
+        'channel:listConfigured',
+        'channel:setEnabled',
+        'channel:validate',
+        'channel:validate',
+        'channel:validateCredentials',
+        // WhatsApp
+        'channel:requestWhatsAppQr',
+        'channel:cancelWhatsAppQr',
+        // ClawHub
+        'clawhub:search',
+        'clawhub:install',
+        'clawhub:uninstall',
+        'clawhub:list',
+        'clawhub:openSkillReadme',
         // UV
         'uv:check',
         'uv:install-all',
+        // Skill config (direct file access)
+        'skill:updateConfig',
+        'skill:getConfig',
+        'skill:getAllConfigs',
+        // Logs
+        'log:getRecent',
+        'log:readFile',
+        'log:getFilePath',
+        'log:getDir',
+        'log:listFiles',
+        // File staging & media
+        'file:stage',
+        'file:stageBuffer',
+        'media:getThumbnails',
+        'media:saveImage',
+        // Chat send with media (reads staged files in main process)
+        'chat:sendWithMedia',
+        // Session management
+        'session:delete',
         // OpenClaw extras
         'openclaw:getDir',
         'openclaw:getConfigDir',
@@ -68,6 +150,16 @@ const electronAPI = {
      */
     on: (channel: string, callback: (...args: unknown[]) => void) => {
       const validChannels = [
+        'gateway:status-changed',
+        'gateway:message',
+        'gateway:notification',
+        'gateway:channel-status',
+        'gateway:chat-message',
+        'channel:whatsapp-qr',
+        'channel:whatsapp-success',
+        'channel:whatsapp-error',
+        'gateway:exit',
+        'gateway:error',
         'navigate',
         'update:status-changed',
         'update:checking',
@@ -77,6 +169,10 @@ const electronAPI = {
         'update:downloaded',
         'update:error',
         'update:auto-install-countdown',
+        'cron:updated',
+        'oauth:code',
+        'oauth:success',
+        'oauth:error',
         'openclaw:cli-installed',
       ];
 
@@ -101,6 +197,13 @@ const electronAPI = {
      */
     once: (channel: string, callback: (...args: unknown[]) => void) => {
       const validChannels = [
+        'gateway:status-changed',
+        'gateway:message',
+        'gateway:notification',
+        'gateway:channel-status',
+        'gateway:chat-message',
+        'gateway:exit',
+        'gateway:error',
         'navigate',
         'update:status-changed',
         'update:checking',
@@ -110,6 +213,9 @@ const electronAPI = {
         'update:downloaded',
         'update:error',
         'update:auto-install-countdown',
+        'oauth:code',
+        'oauth:success',
+        'oauth:error',
       ];
 
       if (validChannels.includes(channel)) {

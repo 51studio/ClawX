@@ -31,6 +31,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { toast } from 'sonner';
+import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 interface SetupStep {
@@ -392,7 +393,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
 
     // Check OpenClaw package status
     try {
-      const openclawStatus = await window.electron.ipcRenderer.invoke('openclaw:status') as {
+      const openclawStatus = await invokeIpc('openclaw:status') as {
         packageExists: boolean;
         isBuilt: boolean;
         dir: string;
@@ -549,7 +550,7 @@ function RuntimeContent({ onStatusChange }: RuntimeContentProps) {
     try {
       const { dir: logDir } = await hostApiFetch<{ dir: string | null }>('/api/logs/dir');
       if (logDir) {
-        await window.electron.ipcRenderer.invoke('shell:showItemInFolder', logDir);
+        await invokeIpc('shell:showItemInFolder', logDir);
       }
     } catch {
       // ignore
@@ -958,7 +959,7 @@ function ProviderContent({
       // Validate key if the provider requires one and a key was entered
       const isApiKeyRequired = requiresKey || (supportsApiKey && authMode === 'apikey');
       if (isApiKeyRequired && apiKey) {
-        const result = await window.electron.ipcRenderer.invoke(
+        const result = await invokeIpc(
           'provider:validateKey',
           selectedAccountId || selectedProvider,
           apiKey,
@@ -1330,7 +1331,7 @@ function ProviderContent({
                         <Button
                           variant="secondary"
                           className="w-full"
-                          onClick={() => window.electron.ipcRenderer.invoke('shell:openExternal', oauthData.verificationUri)}
+                          onClick={() => invokeIpc('shell:openExternal', oauthData.verificationUri)}
                         >
                           <ExternalLink className="h-4 w-4 mr-2" />
                           Open Login Page
@@ -1418,7 +1419,7 @@ function InstallingContent({ skills, onComplete, onSkip }: InstallingContentProp
         setOverallProgress(10);
 
         // Step 2: Call the backend to install uv and setup Python
-        const result = await window.electron.ipcRenderer.invoke('uv:install-all') as {
+        const result = await invokeIpc('uv:install-all') as {
           success: boolean;
           error?: string
         };

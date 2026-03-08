@@ -11,6 +11,7 @@ import { Send, Square, X, Paperclip, FileText, Film, Music, FileArchive, File, L
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { hostApiFetch } from '@/lib/host-api';
+import { invokeIpc } from '@/lib/api-client';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false }:
 
   const pickFiles = useCallback(async () => {
     try {
-      const result = await window.electron.ipcRenderer.invoke('dialog:open', {
+      const result = await invokeIpc('dialog:open', {
         properties: ['openFile', 'multiSelections'],
       }) as { canceled: boolean; filePaths?: string[] };
       if (result.canceled || !result.filePaths?.length) return;
@@ -230,6 +231,7 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false }:
   }, []);
 
   const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
+  const hasFailedAttachments = attachments.some((a) => a.status === 'error');
   const canSend = (input.trim() || attachments.length > 0) && allReady && !disabled && !sending;
   const canStop = sending && !disabled && !!onStop;
 
@@ -394,6 +396,22 @@ export function ChatInput({ onSend, onStop, disabled = false, sending = false }:
               <Send className="h-4 w-4" />
             )}
           </Button>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>Tip: switch sessions from the sidebar to keep context clean.</span>
+          {hasFailedAttachments && (
+            <Button
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              onClick={() => {
+                setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
+                void pickFiles();
+              }}
+            >
+              Retry failed attachments
+            </Button>
+          )}
         </div>
       </div>
     </div>

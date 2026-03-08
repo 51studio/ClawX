@@ -35,6 +35,7 @@ import { StatusBadge, type Status } from '@/components/common/StatusBadge';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
+import { invokeIpc } from '@/lib/api-client';
 import {
   CHANNEL_ICONS,
   CHANNEL_NAMES,
@@ -393,7 +394,7 @@ function AddChannelDialog({ selectedType, onSelectType, onClose, onChannelAdded 
 
     (async () => {
       try {
-        const result = await window.electron.ipcRenderer.invoke(
+        const result = await invokeIpc(
           'channel:getFormValues',
           selectedType
         ) as { success: boolean; values?: Record<string, string> };

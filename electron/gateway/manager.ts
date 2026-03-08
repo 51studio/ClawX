@@ -93,6 +93,8 @@ export class GatewayManager extends EventEmitter {
   private readonly connectionMonitor = new GatewayConnectionMonitor();
   private readonly lifecycleController = new GatewayLifecycleController();
   private readonly restartController = new GatewayRestartController();
+  private reloadDebounceTimer: NodeJS.Timeout | null = null;
+  private externalShutdownSupported: boolean | null = null;
 
   constructor(config?: Partial<ReconnectConfig>) {
     super();
@@ -142,6 +144,10 @@ export class GatewayManager extends EventEmitter {
     return sanitized;
   }
 
+  private isUnsupportedShutdownError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /unknown method:\s*shutdown/i.test(message);
+  }
   /**
    * Get current Gateway status
    */
@@ -284,11 +290,17 @@ export class GatewayManager extends EventEmitter {
 
     // If this manager is attached to an external gateway process, ask it to shut down
     // over protocol before closing the socket.
-    if (!this.ownsProcess && this.ws?.readyState === WebSocket.OPEN) {
+    if (!this.ownsProcess && this.ws?.readyState === WebSocket.OPEN && this.externalShutdownSupported !== false) {
       try {
         await this.rpc('shutdown', undefined, 5000);
+        this.externalShutdownSupported = true;
       } catch (error) {
-        logger.warn('Failed to request shutdown for externally managed Gateway:', error);
+        if (this.isUnsupportedShutdownError(error)) {
+          this.externalShutdownSupported = false;
+          logger.info('External Gateway does not support "shutdown"; skipping shutdown RPC for future stops');
+        } else {
+          logger.warn('Failed to request shutdown for externally managed Gateway:', error);
+        }
       }
     }
 
@@ -378,6 +390,77 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
+   * Ask the Gateway process to reload config in-place when possible.
+   * Falls back to restart on unsupported platforms or signaling failures.
+   */
+  async reload(): Promise<void> {
+    if (this.restartController.isRestartDeferred({
+      state: this.status.state,
+      startLock: this.startLock,
+    })) {
+      this.restartController.markDeferredRestart('reload', {
+        state: this.status.state,
+        startLock: this.startLock,
+      });
+      return;
+    }
+
+    if (!this.process?.pid || this.status.state !== 'running') {
+      logger.warn('Gateway reload requested while not running; falling back to restart');
+      await this.restart();
+      return;
+    }
+
+    if (process.platform === 'win32') {
+      logger.debug('Windows detected, falling back to Gateway restart for reload');
+      await this.restart();
+      return;
+    }
+
+    const connectedForMs = this.status.connectedAt
+      ? Date.now() - this.status.connectedAt
+      : Number.POSITIVE_INFINITY;
+
+    // Avoid signaling a process that just came up; it will already read latest config.
+    if (connectedForMs < 8000) {
+      logger.info(`Gateway connected ${connectedForMs}ms ago, skipping reload signal`);
+      return;
+    }
+
+    try {
+      process.kill(this.process.pid, 'SIGUSR1');
+      logger.info(`Sent SIGUSR1 to Gateway for config reload (pid=${this.process.pid})`);
+      // Some gateway builds do not handle SIGUSR1 as an in-process reload.
+      // If process state doesn't recover quickly, fall back to restart.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (this.status.state !== 'running' || !this.process?.pid) {
+        logger.warn('Gateway did not stay running after reload signal, falling back to restart');
+        await this.restart();
+      }
+    } catch (error) {
+      logger.warn('Gateway reload signal failed, falling back to restart:', error);
+      await this.restart();
+    }
+  }
+
+  /**
+   * Debounced reload — coalesces multiple rapid config-change events into one
+   * in-process reload when possible.
+   */
+  debouncedReload(delayMs = 1200): void {
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+    }
+    logger.debug(`Gateway reload debounced (will fire in ${delayMs}ms)`);
+    this.reloadDebounceTimer = setTimeout(() => {
+      this.reloadDebounceTimer = null;
+      void this.reload().catch((err) => {
+        logger.warn('Debounced Gateway reload failed:', err);
+      });
+    }, delayMs);
+  }
+
+  /**
    * Clear all active timers
    */
   private clearAllTimers(): void {
@@ -387,6 +470,10 @@ export class GatewayManager extends EventEmitter {
     }
     this.connectionMonitor.clear();
     this.restartController.clearDebounceTimer();
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+      this.reloadDebounceTimer = null;
+    }
   }
 
   /**

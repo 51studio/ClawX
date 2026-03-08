@@ -32,6 +32,12 @@ export function getProviderEnvVar(type: string): string | undefined {
   return getSharedProviderEnvVar(type) ?? EXTRA_ENV_ONLY_PROVIDERS[type]?.envVar;
 }
 
+/** Get all environment variable names for a provider type (primary first). */
+export function getProviderEnvVars(type: string): string[] {
+  const envVar = getProviderEnvVar(type);
+  return envVar ? [envVar] : [];
+}
+
 /** Get the default model string for a provider type */
 export function getProviderDefaultModel(type: string): string | undefined {
   return getSharedProviderDefaultModel(type);
