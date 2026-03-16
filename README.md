@@ -143,6 +143,18 @@ In **Settings → General**, you can enable **Launch at system startup** so Claw
 
 Download the latest release for your platform from the [Releases](https://github.com/ValueCell-ai/ClawX/releases) page.
 
+#### Bundled OpenClaw CLI on Windows
+
+Packaged Windows builds add a bundled `openclaw` wrapper to your user `PATH`. That wrapper runs the OpenClaw runtime embedded inside ClawX rather than a separate global npm install.
+
+For terminal UI usage:
+
+- run `openclaw tui` (not just `openclaw`)
+- the TUI still opens inside your current terminal host (PowerShell, PowerShell 7, Windows Terminal, Git Bash, etc.)
+- ClawX requests an alternate screen buffer for the bundled Windows `openclaw tui` flow so the shell screen is restored cleanly when you exit
+
+Other bundled CLI subcommands such as `openclaw doctor`, `openclaw status`, and `openclaw dashboard` continue to run in the current shell. `openclaw update` remains managed through ClawX app updates. For the best Windows terminal rendering, we recommend Windows Terminal or PowerShell 7.
+
 #### Build from Source
 
 ```bash

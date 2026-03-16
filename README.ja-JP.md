@@ -142,6 +142,18 @@ Skills ページでは OpenClaw の複数ソース（管理ディレクトリ、
 
 [Releases](https://github.com/ValueCell-ai/ClawX/releases)ページから、お使いのプラットフォーム向けの最新リリースをダウンロードしてください。
 
+#### Windows の同梱 OpenClaw CLI
+
+パッケージ版の Windows ビルドは、同梱された `openclaw` ラッパーをユーザーの `PATH` に追加します。このラッパーは、別途グローバル npm インストールされた OpenClaw ではなく、ClawX に埋め込まれた OpenClaw ランタイムを起動します。
+
+ターミナル TUI を使う場合は次の点に注意してください：
+
+- `openclaw` だけではなく `openclaw tui` を実行する
+- TUI は現在使っているターミナルホスト（PowerShell、PowerShell 7、Windows Terminal、Git Bash など）の中で開く
+- 同梱 Windows `openclaw tui` では、終了時にシェル画面をきれいに戻せるよう、ClawX が alternate screen buffer の利用を要求する
+
+`openclaw doctor`、`openclaw status`、`openclaw dashboard` などの他の同梱 CLI サブコマンドは、引き続き現在のシェル内で実行されます。`openclaw update` は引き続き ClawX アプリの更新で管理されます。Windows で最も安定した表示を得るには、Windows Terminal または PowerShell 7 を推奨します。
+
 #### ソースからビルド
 
 ```bash

@@ -143,6 +143,18 @@ Skills 页面可展示来自多个 OpenClaw 来源的技能（托管目录、wor
 
 从 [Releases](https://github.com/ValueCell-ai/ClawX/releases) 页面下载适用于你平台的最新版本。
 
+#### Windows 下内置的 OpenClaw CLI
+
+打包后的 Windows 版本会把内置的 `openclaw` 包装命令加入当前用户的 `PATH`。这个命令运行的是 ClawX 内嵌的 OpenClaw 运行时，而不是单独的全局 npm 安装。
+
+如果你想使用终端 TUI：
+
+- 请运行 `openclaw tui`（而不是只输入 `openclaw`）
+- TUI 仍然会在你当前的终端宿主中打开（PowerShell、PowerShell 7、Windows Terminal、Git Bash 等）
+- 对于内置的 Windows `openclaw tui`，ClawX 会请求使用备用屏幕缓冲区，这样退出后可以更干净地恢复原来的 shell 画面
+
+其他内置 CLI 子命令，例如 `openclaw doctor`、`openclaw status`、`openclaw dashboard`，仍然会在当前 shell 中运行。`openclaw update` 依然通过 ClawX 应用更新来管理。为了获得最佳的 Windows 终端渲染效果，推荐使用 Windows Terminal 或 PowerShell 7。
+
 #### 从源码构建
 
 ```bash
