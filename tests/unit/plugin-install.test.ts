@@ -151,4 +151,38 @@ describe('plugin installer diagnostics', () => {
       }),
     );
   });
+
+  it('logs EPERM diagnostics with source and target paths', async () => {
+    setPlatform('win32');
+    mockHomedir.mockReturnValue('C:\\Users\\test');
+
+    const sourceDir = 'C:\\Program Files\\ClawX\\resources\\openclaw-plugins\\wecom';
+    const sourceManifestSuffix = 'Program Files\\ClawX\\resources\\openclaw-plugins\\wecom\\openclaw.plugin.json';
+
+    mockExistsSync.mockImplementation((input: string) => String(input).includes(sourceManifestSuffix));
+    mockCpSync.mockImplementation(() => {
+      const error = new Error('access denied') as NodeJS.ErrnoException;
+      error.code = 'EPERM';
+      throw error;
+    });
+
+    const { ensurePluginInstalled } = await import('@electron/utils/plugin-install');
+    const result = ensurePluginInstalled('wecom', [sourceDir], 'WeCom');
+
+    expect(result.installed).toBe(false);
+    expect(result.warning).toBe('Failed to install bundled WeCom plugin mirror');
+
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      '[plugin] Bundled mirror install failed for WeCom',
+      expect.objectContaining({
+        sourceDir,
+        targetDir: expect.stringContaining('.openclaw/extensions/wecom'),
+        platform: 'win32',
+        attempts: [
+          expect.objectContaining({ attempt: 1, code: 'EPERM' }),
+          expect.objectContaining({ attempt: 2, code: 'EPERM' }),
+        ],
+      }),
+    );
+  });
 });
