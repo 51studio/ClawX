@@ -1,0 +1,23 @@
+{
+  "version": "0.3.2",
+  "channel": "latest",
+  "releaseDate": "2026-03-27T12:00:50Z",
+  "downloads": {
+    "mac": {
+      "x64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-mac-x64.dmg",
+      "arm64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-mac-arm64.dmg"
+    },
+    "win": {
+      "x64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-win-x64.exe",
+      "arm64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-win-arm64.exe"
+    },
+    "linux": {
+      "deb_amd64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-linux-amd64.deb",
+      "deb_arm64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-linux-arm64.deb",
+      "appimage_x64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-linux-x86_64.AppImage",
+      "appimage_arm64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-linux-arm64.AppImage",
+      "rpm_x64": "http://oss.daoping-ai.com/latest/DPClaw-0.3.2-linux-x86_64.rpm"
+    }
+  },
+  "changelog": "https://github.com/51studio/ClawX/releases/tag/v0.3.2"
+}

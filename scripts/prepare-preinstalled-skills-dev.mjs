@@ -10,8 +10,8 @@ const ROOT = join(__dirname, '..');
 const lockPath = join(ROOT, 'build', 'preinstalled-skills', '.preinstalled-lock.json');
 const bundleScript = join(ROOT, 'scripts', 'bundle-preinstalled-skills.mjs');
 
-if (process.env.CLAWX_SKIP_PREINSTALLED_SKILLS_PREPARE === '1') {
-  echo`Skipping preinstalled skills prepare (CLAWX_SKIP_PREINSTALLED_SKILLS_PREPARE=1).`;
+if (process.env.DPCLAW_SKIP_PREINSTALLED_SKILLS_PREPARE === '1') {
+  echo`Skipping preinstalled skills prepare (DPCLAW_SKIP_PREINSTALLED_SKILLS_PREPARE=1).`;
   process.exit(0);
 }
 

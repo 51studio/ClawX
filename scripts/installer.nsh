@@ -1,4 +1,4 @@
-; ClawX Custom NSIS Installer/Uninstaller Script
+; DPClaw Custom NSIS Installer/Uninstaller Script
 ;
 ; Install: enables long paths, adds resources\cli to user PATH for openclaw CLI.
 ; Uninstall: removes the PATH entry and optionally deletes user data.
@@ -17,65 +17,238 @@
   ; Make stage logs visible on assisted installers (defaults to hidden).
   SetDetailsPrint both
   DetailPrint "Preparing installation..."
-  DetailPrint "Extracting ClawX runtime files. This can take a few minutes on slower disks or while antivirus scanning is active."
+  DetailPrint "Extracting DPClaw runtime files. This can take a few minutes on slower disks or while antivirus scanning is active."
 
   ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
 
   ${if} $R0 == 0
     ${if} ${isUpdated}
-      # allow app to exit without explicit kill
-      Sleep 1000
-      Goto doStopProcess
+      # Auto-update: the app is already shutting down (quitAndInstall was called).
+      # The before-quit handler needs up to 8s to gracefully stop the Gateway
+      # process tree (5s timeout + force-terminate + re-quit).  Wait for the
+      # app to exit on its own before resorting to force-kill.
+      DetailPrint `Waiting for "${PRODUCT_NAME}" to finish shutting down...`
+      Sleep 8000
+      ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
+      ${if} $R0 != 0
+        # App exited cleanly. Still kill long-lived child processes (gateway,
+        # uv, python) which may not have followed the app's graceful exit.
+        nsExec::ExecToStack 'taskkill /F /IM openclaw-gateway.exe'
+        Pop $0
+        Pop $1
+        nsExec::ExecToStack 'taskkill /F /IM uv.exe'
+        Pop $0
+        Pop $1
+        Goto done_killing
+      ${endIf}
+      # App didn't exit in time; fall through to force-kill
     ${endIf}
-    MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK doStopProcess
-    Quit
+    ${if} ${isUpdated} ; skip the dialog for auto-updates
+    ${else}
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "$(appRunning)" /SD IDOK IDOK doStopProcess
+      Quit
+    ${endIf}
 
     doStopProcess:
     DetailPrint `Closing running "${PRODUCT_NAME}"...`
 
-    # Silently kill the process using nsProcess instead of taskkill / cmd.exe
-    ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-    
-    # to ensure that files are not "in-use"
-    Sleep 300
+    # Kill ALL processes whose executable lives inside $INSTDIR.
+    # This covers DPClaw.exe (multiple Electron processes), openclaw-gateway.exe,
+    # python.exe (skills runtime), uv.exe (package manager), and any other
+    # child process that might hold file locks in the installation directory.
+    #
+    # Use PowerShell Get-CimInstance for path-based matching (most reliable),
+    # with taskkill name-based fallback for restricted environments.
+    # Note: Using backticks ` ` for the NSIS string allows us to use single quotes inside.
+    nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith('$INSTDIR', [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"`
+    Pop $0
+    Pop $1
 
-    # Retry counter
-    StrCpy $R1 0
+    ${if} $0 != 0
+      # PowerShell failed (policy restriction, etc.) — fall back to name-based kill
+      nsExec::ExecToStack 'taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
+      Pop $0
+      Pop $1
+    ${endIf}
 
-    loop:
-      IntOp $R1 $R1 + 1
+    # Also kill well-known child processes that may have detached from the
+    # Electron process tree or run from outside $INSTDIR (e.g. system python).
+    nsExec::ExecToStack 'taskkill /F /IM openclaw-gateway.exe'
+    Pop $0
+    Pop $1
+    nsExec::ExecToStack 'taskkill /F /IM uv.exe'
+    Pop $0
+    Pop $1
 
-      ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-      ${if} $R0 == 0
-        # wait to give a chance to exit gracefully
-        Sleep 1000
-        ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        
-        ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
-        ${If} $R0 == 0
-          DetailPrint `Waiting for "${PRODUCT_NAME}" to close.`
-          Sleep 2000
-        ${else}
-          Goto not_running
-        ${endIf}
-      ${else}
-        Goto not_running
-      ${endIf}
+    # Wait for Windows to fully release file handles after process termination.
+    # 5 seconds accommodates slow antivirus scanners and filesystem flush delays.
+    Sleep 5000
+    DetailPrint "Processes terminated. Continuing installation..."
 
-      # App likely running with elevated permissions.
-      # Ask user to close it manually
-      ${if} $R1 > 1
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDRETRY loop
-        Quit
-      ${else}
-        Goto loop
-      ${endIf}
-    not_running:
+    done_killing:
       ${nsProcess::Unload}
   ${endIf}
+
+  ; Even if DPClaw.exe was not detected as running, orphan child processes
+  ; (python.exe, openclaw-gateway.exe, uv.exe, etc.) from a previous crash
+  ; or unclean shutdown may still hold file locks inside $INSTDIR.
+  ; Unconditionally kill any process whose executable lives in the install dir.
+  nsExec::ExecToStack `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Get-CimInstance -ClassName Win32_Process | Where-Object { $$_.ExecutablePath -and $$_.ExecutablePath.StartsWith('$INSTDIR', [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"`
+  Pop $0
+  Pop $1
+
+  ${if} $0 != 0
+    # Fallback to unconditionally killing known processes if PowerShell fails
+    nsExec::ExecToStack 'taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
+    Pop $0
+    Pop $1
+    nsExec::ExecToStack 'taskkill /F /IM openclaw-gateway.exe'
+    Pop $0
+    Pop $1
+    nsExec::ExecToStack 'taskkill /F /IM uv.exe'
+    Pop $0
+    Pop $1
+  ${endIf}
+
+  ; Brief wait for handle release (main wait was already done above if app was running)
+  Sleep 2000
+
+  ; Release NSIS's CWD on $INSTDIR BEFORE the rename check.
+  ; NSIS sets CWD to $INSTDIR in .onInit; Windows refuses to rename a directory
+  ; that any process (including NSIS itself) has as its CWD.
+  SetOutPath $TEMP
+
+  ; Pre-emptively clear the old installation directory so that the 7z
+  ; extraction `CopyFiles` step in extractAppPackage.nsh won't fail on
+  ; locked files.  electron-builder's extractUsing7za macro extracts to a
+  ; temp folder first, then uses `CopyFiles /SILENT` to copy into $INSTDIR.
+  ; If ANY file in $INSTDIR is still locked, CopyFiles fails and triggers a
+  ; "Can't modify DPClaw's files" retry loop -> "DPClaw 无法关闭" dialog.
+  ;
+  ; Strategy: rename (move) the old $INSTDIR out of the way.  Rename works
+  ; even when AV/indexer have files open for reading (they use
+  ; FILE_SHARE_DELETE sharing mode), whereas CopyFiles fails because it
+  ; needs write/overwrite access which some AV products deny.
+  ; Check if a previous installation exists ($INSTDIR is a directory).
+  ; Use trailing backslash — the correct NSIS idiom for directory existence.
+  ; (IfFileExists "$INSTDIR\*.*" only matches files containing a dot and
+  ;  would fail for extensionless files or pure-subdirectory layouts.)
+  IfFileExists "$INSTDIR\" 0 _instdir_clean
+    ; IMPORTANT: All deletions here must be non-blocking (async).
+    ; Synchronous RMDir/rd of a 300MB old installation directory causes a
+    ; multi-minute hang visible to the user as a frozen installer.
+    ;
+    ; Strategy: cascade RENAME (instant, < 1ms each):
+    ;   1. $INSTDIR.old.old  (if exists) → async delete, no wait
+    ;   2. $INSTDIR.old      (if exists) → rename to $INSTDIR.old.old
+    ;   3. $INSTDIR          → rename to $INSTDIR.old
+    ;   4. CreateDirectory $INSTDIR (empty, CopyFiles has no locked files)
+    ; All actual disk I/O (deleting .old, .old.old) runs async in customInstall.
+
+    ; Step 1: If a doubly-stale directory exists, delete it async (fire and forget).
+    IfFileExists "$INSTDIR.old.old\" 0 _no_stale2
+      nsExec::ExecToStack 'cmd.exe /c start "" /B rd /s /q "$INSTDIR.old.old"'
+      Pop $0
+      Pop $1
+    _no_stale2:
+
+    ; Step 2: Move $INSTDIR.old → $INSTDIR.old.old so $INSTDIR.old is free.
+    IfFileExists "$INSTDIR.old\" 0 _no_stale_old
+      ClearErrors
+      Rename "$INSTDIR.old" "$INSTDIR.old.old"
+      ; If rename failed (e.g., .old.old async delete not yet done), delete async
+      ; and wait briefly. Actual disk I/O will complete in the background.
+      IfErrors 0 _no_stale_old
+        nsExec::ExecToStack 'cmd.exe /c start "" /B rd /s /q "$INSTDIR.old"'
+        Pop $0
+        Pop $1
+        Sleep 2000
+    _no_stale_old:
+
+    ; Step 3: Rename $INSTDIR → $INSTDIR.old (should always succeed now).
+    ClearErrors
+    Rename "$INSTDIR" "$INSTDIR.old"
+    IfErrors 0 _instdir_moved
+      ; Rename still failed — a process reopened a file in $INSTDIR after our kill.
+      ; Delete async; wait 2s and recreate an empty dir for CopyFiles.
+      nsExec::ExecToStack 'cmd.exe /c start "" /B rd /s /q "$INSTDIR"'
+      Pop $0
+      Pop $1
+      Sleep 2000
+      CreateDirectory "$INSTDIR"
+      Goto _instdir_clean
+    _instdir_moved:
+      CreateDirectory "$INSTDIR"
+  _instdir_clean:
+
+  ; Pre-emptively remove the old uninstall registry entry so that
+  ; electron-builder's uninstallOldVersion skips the old uninstaller entirely.
+  ;
+  ; Why: uninstallOldVersion has a hardcoded 5-retry loop that runs the old
+  ; uninstaller repeatedly.  The old uninstaller's atomicRMDir fails on locked
+  ; files (antivirus, indexing) causing a blocking "DPClaw 无法关闭" dialog.
+  ; Deleting UninstallString makes uninstallOldVersion return immediately.
+  ; The new installer will overwrite / extract all files on top of the old dir.
+  ; registryAddInstallInfo will write the correct new entries afterwards.
+  ; Clean both SHELL_CONTEXT and HKCU to cover cross-hive upgrades
+  ; (e.g. old install was per-user, new install is per-machine or vice versa).
+  DeleteRegValue SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" UninstallString
+  DeleteRegValue SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" QuietUninstallString
+  DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" UninstallString
+  DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" QuietUninstallString
+  !ifdef UNINSTALL_REGISTRY_KEY_2
+    DeleteRegValue SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" UninstallString
+    DeleteRegValue SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}" QuietUninstallString
+    DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY_2}" UninstallString
+    DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY_2}" QuietUninstallString
+  !endif
+!macroend
+
+; Override electron-builder's handleUninstallResult to prevent the
+; "DPClaw 无法关闭" retry dialog when the old uninstaller fails.
+;
+; During upgrades, electron-builder copies the old uninstaller to a temp dir
+; and runs it silently.  The old uninstaller uses atomicRMDir to rename every
+; file out of $INSTDIR.  If ANY file is still locked (antivirus scanner,
+; Windows Search indexer, delayed kernel handle release after taskkill), it
+; aborts with a non-zero exit code.  The default handler retries 5× then shows
+; a blocking MessageBox.
+;
+; This macro clears the error and lets the new installer proceed — it will
+; simply overwrite / extract new files on top of the (partially cleaned) old
+; installation directory.  This is safe because:
+;   1. Processes have already been force-killed in customCheckAppRunning.
+;   2. The new installer extracts a complete, self-contained file tree.
+;   3. Any leftover old files that weren't removed are harmless.
+!macro customUnInstallCheck
+  ${if} $R0 != 0
+    DetailPrint "Old uninstaller exited with code $R0. Continuing with overwrite install..."
+  ${endIf}
+  ClearErrors
+!macroend
+
+; Same safety net for the HKEY_CURRENT_USER uninstall path.
+; Without this, handleUninstallResult would show a fatal error and Quit.
+!macro customUnInstallCheckCurrentUser
+  ${if} $R0 != 0
+    DetailPrint "Old uninstaller (current user) exited with code $R0. Continuing..."
+  ${endIf}
+  ClearErrors
 !macroend
 
 !macro customInstall
+  ; Async cleanup of old dirs left by the cascade rename in customCheckAppRunning.
+  ; Wait 60s before starting deletion to avoid I/O contention with DPClaw's
+  ; first launch (Windows Defender scan, ASAR mapping, etc.).
+  ; "ping -n 61 127.0.0.1" sleeps ~60s without requiring admin rights.
+  IfFileExists "$INSTDIR.old\" 0 +3
+    nsExec::ExecToStack `cmd.exe /c start "" /B cmd /c "ping -n 61 127.0.0.1 > nul & rd /s /q $\"$INSTDIR.old$\""`
+    Pop $0
+    Pop $1
+  IfFileExists "$INSTDIR.old.old\" 0 +3
+    nsExec::ExecToStack `cmd.exe /c start "" /B cmd /c "ping -n 31 127.0.0.1 > nul & rd /s /q $\"$INSTDIR.old.old$\""`
+    Pop $0
+    Pop $1
   DetailPrint "Core files extracted. Finalizing system integration..."
 
   ; Enable Windows long path support (Windows 10 1607+ / Windows 11).
@@ -126,15 +299,17 @@
 
   ; Ask user if they want to completely remove all user data
   MessageBox MB_YESNO|MB_ICONQUESTION \
-    "Do you want to completely remove all ClawX user data?$\r$\n$\r$\nThis will delete:$\r$\n  • .openclaw folder (configuration & skills)$\r$\n  • AppData\Local\clawx (local app data)$\r$\n  • AppData\Roaming\clawx (roaming app data)$\r$\n$\r$\nSelect 'No' to keep your data for future reinstallation." \
+    "Do you want to completely remove all DPClaw user data?$\r$\n$\r$\nThis will delete:$\r$\n  • .openclaw folder (configuration & skills)$\r$\n  • AppData\Local\dpclaw (local app data)$\r$\n  • AppData\Roaming\dpclaw (roaming app data)$\r$\n$\r$\nSelect 'No' to keep your data for future reinstallation." \
     /SD IDNO IDYES _cu_removeData IDNO _cu_skipRemove
 
   _cu_removeData:
-    ; Kill any lingering ClawX processes to release file locks on electron-store
-    ; JSON files (settings.json, clawx-providers.json, window-state.json, etc.)
+    ; Kill any lingering DPClaw processes (and their child process trees) to
+    ; release file locks on electron-store JSON files, Gateway sockets, etc.
     ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
     ${if} $R0 == 0
-      ${nsProcess::KillProcess} "${APP_EXECUTABLE_FILENAME}" $R0
+      nsExec::ExecToStack 'taskkill /F /T /IM "${APP_EXECUTABLE_FILENAME}"'
+      Pop $0
+      Pop $1
     ${endIf}
     ${nsProcess::Unload}
 
@@ -143,8 +318,8 @@
 
     ; --- Always remove current user's data first ---
     RMDir /r "$PROFILE\.openclaw"
-    RMDir /r "$LOCALAPPDATA\clawx"
-    RMDir /r "$APPDATA\clawx"
+    RMDir /r "$LOCALAPPDATA\dpclaw"
+    RMDir /r "$APPDATA\dpclaw"
 
     ; --- Retry: if directories still exist (locked files), wait and try again ---
     ; Check .openclaw
@@ -157,22 +332,22 @@
         Pop $1
     _cu_openclawDone:
 
-    ; Check AppData\Local\clawx
-    IfFileExists "$LOCALAPPDATA\clawx\*.*" 0 _cu_localDone
+    ; Check AppData\Local\dpclaw
+    IfFileExists "$LOCALAPPDATA\dpclaw\*.*" 0 _cu_localDone
       Sleep 3000
-      RMDir /r "$LOCALAPPDATA\clawx"
-      IfFileExists "$LOCALAPPDATA\clawx\*.*" 0 _cu_localDone
-        nsExec::ExecToStack 'cmd.exe /c rd /s /q "$LOCALAPPDATA\clawx"'
+      RMDir /r "$LOCALAPPDATA\dpclaw"
+      IfFileExists "$LOCALAPPDATA\dpclaw\*.*" 0 _cu_localDone
+        nsExec::ExecToStack 'cmd.exe /c rd /s /q "$LOCALAPPDATA\dpclaw"'
         Pop $0
         Pop $1
     _cu_localDone:
 
-    ; Check AppData\Roaming\clawx
-    IfFileExists "$APPDATA\clawx\*.*" 0 _cu_roamingDone
+    ; Check AppData\Roaming\dpclaw
+    IfFileExists "$APPDATA\dpclaw\*.*" 0 _cu_roamingDone
       Sleep 3000
-      RMDir /r "$APPDATA\clawx"
-      IfFileExists "$APPDATA\clawx\*.*" 0 _cu_roamingDone
-        nsExec::ExecToStack 'cmd.exe /c rd /s /q "$APPDATA\clawx"'
+      RMDir /r "$APPDATA\dpclaw"
+      IfFileExists "$APPDATA\dpclaw\*.*" 0 _cu_roamingDone
+        nsExec::ExecToStack 'cmd.exe /c rd /s /q "$APPDATA\dpclaw"'
         Pop $0
         Pop $1
     _cu_roamingDone:
@@ -181,10 +356,10 @@
     StrCpy $R3 ""
     IfFileExists "$PROFILE\.openclaw\*.*" 0 +2
       StrCpy $R3 "$R3$\r$\n  • $PROFILE\.openclaw"
-    IfFileExists "$LOCALAPPDATA\clawx\*.*" 0 +2
-      StrCpy $R3 "$R3$\r$\n  • $LOCALAPPDATA\clawx"
-    IfFileExists "$APPDATA\clawx\*.*" 0 +2
-      StrCpy $R3 "$R3$\r$\n  • $APPDATA\clawx"
+    IfFileExists "$LOCALAPPDATA\dpclaw\*.*" 0 +2
+      StrCpy $R3 "$R3$\r$\n  • $LOCALAPPDATA\dpclaw"
+    IfFileExists "$APPDATA\dpclaw\*.*" 0 +2
+      StrCpy $R3 "$R3$\r$\n  • $APPDATA\dpclaw"
     StrCmp $R3 "" _cu_cleanupOk
       MessageBox MB_OK|MB_ICONEXCLAMATION \
         "Some data directories could not be removed (files may be in use):$\r$\n$R3$\r$\n$\r$\nPlease delete them manually after restarting your computer."
@@ -200,12 +375,13 @@
     ReadRegStr $R2 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$R1" "ProfileImagePath"
     StrCmp $R2 "" _cu_enumNext
 
-    ExpandEnvStrings $R2 $R2
-    StrCmp $R2 $PROFILE _cu_enumNext
+    ; ExpandEnvStrings requires distinct src and dest registers
+    ExpandEnvStrings $R3 $R2
+    StrCmp $R3 $PROFILE _cu_enumNext
 
-    RMDir /r "$R2\.openclaw"
-    RMDir /r "$R2\AppData\Local\clawx"
-    RMDir /r "$R2\AppData\Roaming\clawx"
+    RMDir /r "$R3\.openclaw"
+    RMDir /r "$R3\AppData\Local\dpclaw"
+    RMDir /r "$R3\AppData\Roaming\dpclaw"
 
   _cu_enumNext:
     IntOp $R0 $R0 + 1
