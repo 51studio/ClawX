@@ -428,7 +428,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           CHANNEL="${{ steps.version.outputs.channel }}"
-          BASE_URL="http://oss.daoping-ai.com/${CHANNEL}"
+          BASE_URL="http://oss.daoping-ai.com/dpclaw/${CHANNEL}"
 
           jq -n \
             --arg version "$VERSION" \

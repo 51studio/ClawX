@@ -176,15 +176,15 @@ export function createMenu(): void {
         {
           label: 'Documentation',
           click: async () => {
-            await shell.openExternal('https://claw-x.com');
+            await shell.openExternal('https://www.daoping-ai.com/dpclaw');
           },
         },
-        {
-          label: 'Report Issue',
-          click: async () => {
-            await shell.openExternal('https://github.com/51studio/ClawX/issues');
-          },
-        },
+        // {
+        //   label: 'Report Issue',
+        //   click: async () => {
+        //     await shell.openExternal('https://github.com/51studio/ClawX/issues');
+        //   },
+        // },
         { type: 'separator' },
         {
           label: 'OpenClaw Documentation',
