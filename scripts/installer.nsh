@@ -279,6 +279,12 @@
   DetailPrint "Installation steps complete."
 !macroend
 
+!macro customInstallFinish
+  ; electron-builder's runAfterFinish will handle launching the app.
+  ; This macro ensures proper cleanup before the finish page is shown.
+  DetailPrint "Ready to launch ${PRODUCT_NAME}."
+!macroend
+
 !macro customUnInstall
   ; Remove resources\cli from user PATH via PowerShell so long PATH values are handled safely
   InitPluginsDir

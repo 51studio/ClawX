@@ -139,6 +139,7 @@ nsis:
   include: scripts/installer.nsh
   installerIcon: resources/icons/icon.ico
   uninstallerIcon: resources/icons/icon.ico
+  runAfterFinish: true
 
 # Linux Configuration
 linux:
