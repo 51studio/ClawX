@@ -1,5 +1,5 @@
 {
-    "name": "clawx",
+    "name": "dpclaw",
     "version": "0.3.9",
     "pnpm": {
         "onlyBuiltDependencies": [
@@ -26,9 +26,9 @@
             ]
         }
     },
-    "description": "ClawX - Graphical AI Assistant based on OpenClaw",
+    "description": "DPClaw - Graphical AI Assistant based on OpenClaw",
     "main": "dist-electron/main/index.js",
-    "author": "ClawX Team",
+    "author": "DPClaw Team",
     "license": "MIT",
     "private": true,
     "scripts": {
